@@ -6,8 +6,7 @@ import  { api } from "../api/api"
 
 const Login = () => {
     const [error, setError] = useState("")
-    const handleSubmit = async (a) => { 
-            const handleSubmit = async (e) => {
+    const handleSubmit = async (e) => { 
         e.preventDefault()
         setError("")
         const user = {
@@ -85,5 +84,4 @@ const Login = () => {
     )
 }
 
-}
 export default Login

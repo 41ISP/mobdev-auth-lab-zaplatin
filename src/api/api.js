@@ -6,19 +6,26 @@ const apiInstance = axios.create({
         "Content-Type": "application/json",
         "Accept": "application/json"
     },
-}); 
+});
 
 const registerUser = async (user) => {
-    const res = await apiInstance.post("/auth/register", user);
-    return res;
-};
+    const res = await apiInstance.post("/auth/register", user)
+    return res
+}
 
 const loginUser = async (user) => {
-    const res = await apiInstance.post("/auth/login", user);
-    return res;
-};
+    const res = await apiInstance.post("/auth/login", user)
+    return res
+}
+
+
+const getItems = async () => {
+    const res = await apiInstance.get("/items")
+    return res
+}
 
 export const api = {
     registerUser,
-    loginUser
-};
+    loginUser,
+    getItems
+}

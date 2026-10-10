@@ -9,7 +9,7 @@ const Register = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        setError("")
+        setError('')
 
         if (e.target.password.value !== e.target.password2.value ) {
             setError("Пароли не совпадают")
