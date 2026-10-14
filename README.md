@@ -1,16 +1,750 @@
-# React + Vite
+# Маркетплейс
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+_Апи развернуто по адресу `https://api.kitek-pg.ru/api/marketplace/`_
 
-Currently, two official plugins are available:
+Этот проект представляет собой REST API для маркетплейса, где пользователи могут создавать карточки товаров на продажу и делать ставки на товары других пользователей.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Часть 1. Хранилища
 
-## React Compiler
+### 1.1. `useUserStore`: сессия пользователя
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+**Что нужно сделать:**
 
-## Expanding the ESLint configuration
+1. Создайте файл `src/store/useUserStore.js`.
+2. Опишите хранилище с полем `session` (изначально `undefined`).
+3. Добавьте функцию `setSession`, которая записывает переданную сессию.
+4. Добавьте функцию `clearSession`, которая очищает сессию (возвращает `undefined`).
+5. Подключите `persist` с именем `user-storage`, чтобы сессия сохранялась в `localStorage` и переживала перезагрузку страницы.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### 1.2. `useItemStore`: список товаров
+
+**Что нужно сделать:**
+
+1. Создайте файл `src/store/useItemStore.js`.
+2. Добавьте поле `items` (пустой массив).
+3. Добавьте асинхронную функцию `getItems`: она вызывает `api.getItems()` и записывает результат в `items`.
+4. Ошибку внутри `getItems` выведите в консоль через `console.error`.
+
+---
+
+## Часть 2. Запросы в `api.js`
+
+Откройте `src/api/api.js`. Инициализируйте инстанс апишки, через который будете делать запросы.
+
+### 2.1. `baseURL`
+
+```js
+const apiInstance = axios.create({
+    baseURL: "???",
+    headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+    },
+})
+```
+
+### 2.3. Interceptor
+
+Interceptor — функция, которая выполняется перед каждым запросом и может изменить его настройки. С его помощью токен добавляется автоматически, и в остальных функциях о нём думать не нужно.
+
+**Что нужно сделать:**
+
+1. Импортируйте `useUserStore` в `api.js`.
+2. Добавьте interceptor запросов.
+3. Внутри достаньте `session` из стора. Вне компонентов хук `useUserStore()` использовать нельзя, вместо него вызывается метод `getState()`.
+4. Если в сессии есть токен, добавьте в `config.headers` заголовок `Authorization` в формате `Bearer <token>` (после слова `Bearer` пробел).
+5. Верните `config`.
+
+```js
+apiInstance.interceptors.request.use((config) => {
+    const { session } = useUserStore.???()
+
+    if (session?.???) {
+        config.headers.Authorization = `??? ${session.token}`
+    }
+
+    return config
+})
+```
+
+### 2.4. GET-запросы
+
+**Что нужно сделать:** напишите четыре функции по образцу. Каждая отправляет `GET`-запрос и возвращает `res.data`.
+
+| Функция | Путь | Токен |
+|---|---|---|
+| `getItems()` | `/items` | не нужен |
+| `getStats()` | `/stats` | не нужен |
+| `getItemBids(id)` | `/items/${id}/bids` | не нужен |
+| `getMyBids()` | `/bids/my` | нужен (добавляется interceptor) |
+
+### 2.5. `sendItems`: создание товара
+
+По документации: метод `POST`, путь `/items`, тело `{ title, description, price, imageUrl }`, нужен токен.
+
+**Что нужно сделать:**
+
+1. Напишите функцию `sendItems`, которая принимает объект `item`.
+2. Отправьте `POST`-запрос на `/items` и передайте `item` вторым аргументом (это тело запроса). Сериализовать в JSON вручную не нужно, axios делает это сам.
+3. Верните из функции `res.data`.
+
+### 2.6. `deleteItems`: удаление товара
+
+По документации: метод `DELETE`, путь `/items/:id`, нужен токен.
+
+**Что нужно сделать:**
+
+1. Напишите функцию `deleteItems`, которая принимает `id` товара.
+2. Отправьте `DELETE`-запрос на `/items/${id}`.
+3. Верните из функции `res.data`.
+
+### 2.7. `createBid`: ставка
+
+По документации: метод `POST`, путь `/items/:id/bids`, тело `{ "amount": число }`, нужен токен.
+
+**Что нужно сделать:**
+
+1. Напишите функцию, которая принимает **один объект** `{ id, amount }`.
+2. Подставьте `id` в **адрес** запроса.
+3. В **тело** запроса передайте только `{ amount }`, без `id`.
+4. Верните из функции `res.data`.
+
+### 2.8. Экспорт
+
+**Что нужно сделать:** добавьте все функции в объект `api` в конце файла: `registerUser`, `loginUser`, `getItems`, `getStats`, `sendItems`, `deleteItems`, `createBid`, `getItemBids`, `getMyBids`.
+
+---
+
+## Часть 3. Регистрация, вход, выход, меню
+
+### 3.1. Вход (`Login.jsx`)
+
+Сервер возвращает при входе объект с токеном и данными пользователя. Именно он станет `session`.
+
+**Что нужно сделать:**
+
+1. Получите из стора функцию `setSession`, а из `react-router-dom` функцию `useNavigate`.
+2. В `handleSubmit` отмените стандартную отправку формы и очистите ошибку.
+3. Соберите объект `user` из полей `username` и `password`.
+4. Вызовите `api.loginUser(user)`, результат передайте в `setSession`.
+5. После успеха перейдите на главную страницу.
+6. В разметке выведите ошибку `{error && <div className="alert alert-error active">{error}</div>}`.
+
+### 3.2. Регистрация (`Register.jsx`)
+
+**Что нужно сделать:**
+
+1. Сделайте то же, что в шаге 3.1, но с `api.registerUser`. После регистрации сервер тоже возвращает токен, поэтому пользователь сразу считается вошедшим: сохраните сессию и перейдите на главную.
+2. Перед запросом проверьте, что значения полей `password` и `password2` совпадают. Если нет, запишите ошибку «Пароли не совпадают» и завершите выполнение функции (`return`).
+3. Объект `user` собирается из `username` и `password`. Поле `email` добавляйте, только если оно заполнено.
+4. Так же, как в шаге 3.1, удалите статичный блок `alert alert-error` и замените вывод ошибки на блок с классами `alert alert-error active`.
+
+```jsx
+const user = {
+    username: e.target.username.value,
+    password: e.target.password.value,
+}
+if (???) user.email = e.target.email.value
+```
+
+### 3.3. Выход (`Logout.jsx`)
+
+**Что нужно сделать:**
+
+1. Получите из стора функцию `clearSession`.
+2. Вызовите её в `useEffect` перед `navigate('/')`.
+
+### 3.4. Меню (`NavBar.jsx`)
+
+**Что нужно сделать:**
+
+1. Получите из стора `session`.
+2. Если сессия есть, показывайте ссылки «Создать товар» (`/create-item`), «Мои ставки» (`/bids`) и «Выйти» (`/logout`).
+3. Если сессии нет, показывайте только «Войти».
+4. Ссылка «Домой» показывается всегда.
+
+```jsx
+{session ? (
+    <>
+        {/* ссылки для вошедшего пользователя */}
+    </>
+) : (
+    <>
+        {/* ссылка для гостя */}
+    </>
+)}
+```
+
+---
+
+## Часть 4. Главная страница: статистика и товары
+
+Файл: `src/pages/ItemsList.jsx`.
+
+### 4.1. Список товаров
+
+**Что нужно сделать:**
+
+1. Вместо `const items = []` получите `items` и `getItems` из `useItemStore`.
+2. Вызовите `getItems()` в `useEffect` при открытии страницы.
+
+### 4.2. Статистика
+
+**Что нужно сделать:**
+
+1. Добавьте состояние `stats` (начальное значение `null`).
+2. В том же `useEffect` загрузите статистику через `api.getStats()` и сохраните в `stats`. Запрос оберните в `try/catch`, ошибку выведите в консоль.
+3. Выведите в блоках статистики: `totalItems` («Товаров»), `totalBids` («Ставок»), `activeItems` («Активных»), `averageItemPrice` («Средняя цена»). Пока статистика не загружена (`stats` равно `null`), показывайте `0`: используйте `stats?.поле ?? 0`.
+
+Колбэк `useEffect` нельзя делать `async`, поэтому запрос выносится во вложенную асинхронную функцию, которая вызывается ниже:
+
+### 4.3. Переход на страницу товара
+
+**Что нужно сделать:**
+
+1. В `ItemCard.jsx` добавьте в список принимаемых свойств `id`.
+2. Оберните карточку в `<Link to={...}>`, который ведёт на `/item/<id товара>`.
+3. Ссылка по умолчанию подчёркивает и перекрашивает текст.
+
+---
+
+## Часть 5. Создание товара
+
+Файл: `src/components/CreateItem.jsx`.
+
+### 5.1. Маршрут
+
+**Что нужно сделать:**
+
+1. В `main.jsx` импортируйте `CreateItem`.
+2. Добавьте маршрут `create-item` внутрь `<Route path="" element={<Layout />}>`.
+3. В `CreateItem.jsx` замените в `<Link>` атрибут `href` на `to`.
+
+### 5.2. Отправка формы
+
+**Что нужно сделать:**
+
+1. Добавьте состояние `error`, получите `navigate` и функцию `getItems` из `useItemStore`.
+2. В `handleSubmit` отмените стандартную отправку формы и очистите ошибку.
+3. Соберите объект `item` из полей формы `title`, `description`, `price`, `imageUrl`. Значение `price` из формы приходит строкой, сервер ждёт число: преобразуйте.
+4. Поле `imageUrl` необязательное: добавляйте его в объект, только если оно заполнено.
+5. Вызовите `api.sendItems(item)`.
+6. После успеха обновите список товаров в сторе и перейдите на главную.
+7. В `catch` запишите текст ошибки через `getErrorMessage`.
+8. Выведите ошибку над формой блоком `alert alert-error active`.
+
+---
+
+## Часть 6. Страница товара
+
+Файл: `src/pages/ItemDetail.jsx`.
+
+### 6.1. Данные товара
+
+**Что нужно сделать:**
+
+1. Получите `id` товара из адреса через `useParams()`.
+2. Сделайте запрос на `items/:id`
+4. Пока товар не найден, верните из компонента «Загрузка...».
+5. Замените в разметке `ItemShow` на `item`.
+6. У товара без ставок `highestBid` равно `null`. Выведите «ставок нет» вместо `null`, а для `min` поля ввода используйте `highestBid ?? price`.
+7. Дату создания выведите в читаемом виде через `new Date(item.createdAt).toLocaleString("ru-RU")`.
+
+```jsx
+const { id } = useParams()
+const items = useItemStore((state) => state.???)
+const getItems = useItemStore((state) => state.???)
+
+useEffect(() => {
+    ???()
+}, [id])
+
+if (!item) return <div className="container">Загрузка...</div>
+```
+
+Хуки (`useState`, `useEffect` и т. д.) должны вызываться **до** этого `return`.
+
+### 6.2. Ставка
+
+**Что нужно сделать:**
+
+1. Добавьте состояние `error`.
+2. В `handleBid` отмените стандартную отправку формы и очистите ошибку.
+3. Сохраните `e.target` в переменную `form` (после `await` ссылка на событие может быть недоступна). Прочитайте значение поля `bidInput` и преобразуйте в число.
+4. Вызовите `api.createBid` с объектом `{ id, amount }`.
+5. После успеха очистите форму и обновите список товаров, чтобы изменилась «Текущая ставка».
+6. В `catch` запишите текст ошибки и выведите её рядом с формой блоком `alert alert-error active`.
+
+```jsx
+const handleBid = async (e) => {
+    e.preventDefault()
+    setError('')
+
+    const form = e.target
+    const amount = ???(form.bidInput.value)
+
+    try {
+        await api.???({ id, amount })
+        form.reset()
+        await ???()
+    } catch (err) {
+        setError(???(err))
+    }
+}
+```
+
+### 6.3. История ставок
+
+**Что нужно сделать:**
+
+1. Добавьте состояние `bids` (пустой массив).
+2. Напишите функцию `loadBids`, которая вызывает `api.getItemBids(id)` и записывает результат в `bids` (ошибки выводите в консоль).
+3. Вызывайте `loadBids()` при открытии страницы (в `useEffect`) и после успешной ставки.
+4. Раскомментируйте блок «История ставок» в разметке. Атрибуты `class` замените на `className`. Для каждой ставки из `bids` выведите имя пользователя, сумму и дату.
+5. Количество ставок в заголовке блока — `bids.length`.
+6. Ставки приходят от новых к старым, поэтому первая в списке — самая высокая. Выделите её классом `highest-bid-item` и покажите отметку «Лидирует».
+7. Инициалы в круглом значке — первые две буквы имени: `username.slice(0, 2).toUpperCase()`.
+
+### 6.4. Удаление товара
+
+По документации удалить можно только свой товар и только если на него нет ставок.
+
+**Что нужно сделать:**
+
+1. Получите из `useUserStore` сессию. Идентификатор текущего пользователя — `session.user.id`.
+2. Определите, что товар принадлежит текущему пользователю: `session?.user?.id === item.userId`.
+3. Показывайте кнопку «Удалить товар» только владельцу.
+4. По нажатию вызовите `api.deleteItems(id)`, затем обновите список товаров и перейдите на главную.
+5. Ошибку (например, что на товар уже есть ставки) выведите на странице.
+
+---
+
+## Часть 7. Мои ставки
+
+Файл: `src/pages/MyBids.jsx`. Сейчас страница содержит статичную разметку.
+
+**Что нужно сделать:**
+
+1. Добавьте состояние `bids` и загрузите ставки через `api.getMyBids()` при открытии страницы.
+2. Подсчитайте и выведите в блоках сводки: общее количество ставок, количество лидирующих (`isWinning`) и общую сумму всех ставок. Для суммы используйте метод `reduce`.
+3. Удалите статичные примеры и выведите список из `bids`. Для каждой ставки покажите название товара (`itemTitle`) как ссылку на `/item/<itemId>`, сумму, дату и отметку: «Лидирую» для `isWinning`, иначе «Перебита».
+4. Картинок товаров в этих данных нет, поэтому блок `img` из разметки удалите.
+
+```jsx
+const winningCount = bids.filter((bid) => bid.???).length
+const totalAmount = bids.reduce((sum, bid) => ???, 0)
+```
+
+---
+
+## Публичные эндпоинты (не требуют аутентификации)
+
+### 1. Регистрация пользователя
+**POST** `/api/auth/register`
+
+Создает новую учетную запись пользователя.
+
+**Тело запроса:**
+```json
+{
+  "username": "testuser",
+  "password": "password123",
+  "email": "test@example.com"
+}
+```
+
+**Ответ (успех):**
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": 1,
+    "username": "testuser",
+    "email": "test@example.com"
+  }
+}
+```
+
+**Возможные ошибки:**
+- `400` - Неверные данные (имя пользователя < 3 символов, пароль < 6 символов)
+- `409` - Пользователь с таким именем уже существует
+
+### 2. Вход в систему
+**POST** `/api/auth/login`
+
+Авторизация существующего пользователя.
+
+**Тело запроса:**
+```json
+{
+  "username": "testuser",
+  "password": "password123"
+}
+```
+
+**Ответ (успех):**
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": 1,
+    "username": "testuser",
+    "email": "test@example.com"
+  }
+}
+```
+
+**Возможные ошибки:**
+- `400` - Не указано имя пользователя или пароль
+- `401` - Неверное имя пользователя или пароль
+
+### 3. Получение всех товаров
+**GET** `/api/items`
+
+Возвращает список всех товаров, отсортированных по дате создания (новые первые).
+
+**Ответ:**
+```json
+[
+  {
+    "id": 1,
+    "title": "Ноутбук Dell",
+    "description": "Игровой ноутбук в отличном состоянии",
+    "price": 50000,
+    "userId": 1,
+    "username": "testuser",
+    "status": "active",
+    "imageUrl": "https://example.com/laptop.jpg",
+    "createdAt": "2025-10-07T16:45:52.058Z",
+    "highestBid": 55000,
+    "bidCount": 3
+  }
+]
+```
+
+### 4. Получение одного товара
+**GET** `/api/items/:id`
+
+Возвращает один товар
+
+**Ответ:**
+```json
+{
+  "id": 1,
+  "title": "Ноутбук Dell",
+  "description": "Игровой ноутбук в отличном состоянии",
+  "price": 50000,
+  "userId": 1,
+  "username": "testuser",
+  "status": "active",
+  "imageUrl": "https://example.com/laptop.jpg",
+  "createdAt": "2025-10-07T16:45:52.058Z",
+  "highestBid": 55000,
+  "bidCount": 3
+}
+```
+
+### 4. Получение ставок на товар
+**GET** `/api/items/:id/bids`
+
+Возвращает все ставки на конкретный товар, отсортированные по дате (новые первые).
+
+**Ответ:**
+```json
+[
+  {
+    "id": 1,
+    "amount": 55000,
+    "userId": 2,
+    "username": "buyer1",
+    "createdAt": "2025-10-07T17:00:00.000Z"
+  },
+  {
+    "id": 2,
+    "amount": 52000,
+    "userId": 3,
+    "username": "buyer2",
+    "createdAt": "2025-10-07T16:55:00.000Z"
+  }
+]
+```
+
+### 5. Статистика платформы
+**GET** `/api/stats`
+
+Возвращает общую статистику платформы.
+
+**Ответ:**
+```json
+{
+  "totalItems": 15,
+  "totalUsers": 8,
+  "totalBids": 42,
+  "activeItems": 12,
+  "totalValue": 750000,
+  "averageItemPrice": 25000
+}
+```
+
+---
+
+## Защищенные эндпоинты (требуют JWT токен)
+
+### 1. Получение информации о текущем пользователе
+**GET** `/api/auth/me`
+
+**Заголовки:**
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+**Ответ:**
+```json
+{
+  "id": 1,
+  "username": "testuser",
+  "email": "test@example.com",
+  "createdAt": "2025-10-07T16:22:34.688Z"
+}
+```
+
+### 2. Создание товара
+**POST** `/api/items`
+
+**Заголовки:**
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+**Тело запроса:**
+```json
+{
+  "title": "iPhone 14",
+  "description": "Новый iPhone 14 в идеальном состоянии, все аксессуары в комплекте",
+  "price": 80000,
+  "imageUrl": "https://example.com/iphone.jpg"
+}
+```
+
+**Ответ (успех):**
+```json
+{
+  "id": 5,
+  "title": "iPhone 14",
+  "description": "Новый iPhone 14 в идеальном состоянии, все аксессуары в комплекте",
+  "price": 80000,
+  "imageUrl": "https://example.com/iphone.jpg",
+  "userId": 1,
+  "username": "testuser",
+  "status": "active",
+  "highestBid": null,
+  "bidCount": 0,
+  "createdAt": "2025-10-07T18:00:00.000Z"
+}
+```
+
+**Возможные ошибки:**
+- `400` - Не указано название товара или описание
+- `400` - Не указана цена или цена <= 0
+- `400` - Название слишком длинное (> 100 символов)
+- `400` - Описание слишком длинное (> 1000 символов)
+- `401` - Не указан токен аутентификации
+- `403` - Недействительный токен
+
+### 3. Удаление товара
+**DELETE** `/api/items/:id`
+
+Удаляет товар. Можно удалить только свой товар и только если на него нет ставок.
+
+**Заголовки:**
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+**Ответ (успех):**
+```json
+{
+  "success": true,
+  "message": "Item deleted"
+}
+```
+
+**Возможные ошибки:**
+- `403` - Нет прав на удаление этого товара
+- `404` - Товар не найден
+- `400` - Нельзя удалить товар, на который уже есть ставки
+
+### 4. Создание ставки на товар
+**POST** `/api/items/:id/bids`
+
+Создает ставку на товар. Ставка должна быть выше текущей максимальной ставки или начальной цены.
+
+**Заголовки:**
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+**Тело запроса:**
+```json
+{
+  "amount": 85000
+}
+```
+
+**Ответ (успех):**
+```json
+{
+  "id": 10,
+  "itemId": 5,
+  "userId": 2,
+  "username": "buyer1",
+  "amount": 85000,
+  "createdAt": "2025-10-07T18:30:00.000Z"
+}
+```
+
+**Возможные ошибки:**
+- `400` - Не указана сумма ставки или сумма <= 0
+- `400` - Ставка должна быть выше текущей максимальной ставки
+- `400` - Нельзя делать ставку на свой товар
+- `400` - Товар не доступен для торгов
+- `404` - Товар не найден
+
+### 5. Получение моих ставок
+**GET** `/api/bids/my`
+
+Возвращает все ставки текущего пользователя.
+
+**Заголовки:**
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+**Ответ:**
+```json
+[
+  {
+    "id": 10,
+    "amount": 85000,
+    "itemId": 5,
+    "itemTitle": "iPhone 14",
+    "createdAt": "2025-10-07T18:30:00.000Z",
+    "isWinning": true
+  },
+  {
+    "id": 8,
+    "amount": 45000,
+    "itemId": 3,
+    "itemTitle": "Macbook Air",
+    "createdAt": "2025-10-07T17:15:00.000Z",
+    "isWinning": false
+  }
+]
+```
+
+---
+
+## Структура данных
+
+### Пользователь (User)
+```json
+{
+  "id": 1,
+  "username": "testuser",
+  "email": "test@example.com",
+  "password": "hashed_password",
+  "createdAt": "2025-10-07T16:22:34.688Z"
+}
+```
+
+### Товар (Item)
+```json
+{
+  "id": 1,
+  "title": "Название товара",
+  "description": "Описание товара",
+  "price": 50000,
+  "imageUrl": "https://example.com/image.jpg",
+  "userId": 1,
+  "username": "seller",
+  "status": "active",
+  "highestBid": 55000,
+  "bidCount": 3,
+  "createdAt": "2025-10-07T16:45:52.058Z"
+}
+```
+
+### Ставка (Bid)
+```json
+{
+  "id": 1,
+  "itemId": 1,
+  "userId": 2,
+  "username": "buyer",
+  "amount": 55000,
+  "createdAt": "2025-10-07T17:00:00.000Z"
+}
+```
+
+---
+
+## Коды ошибок
+
+- `200` - Успешный запрос
+- `201` - Ресурс создан
+- `400` - Неверный запрос (некорректные данные)
+- `401` - Не авторизован (требуется токен)
+- `403` - Доступ запрещен (недействительный токен или нет прав)
+- `404` - Ресурс не найден
+- `409` - Конфликт (например, пользователь уже существует)
+- `500` - Внутренняя ошибка сервера
+
+---
+
+## Примеры использования
+
+### Полный цикл работы с API:
+
+1. **Регистрация:**
+```bash
+curl -X POST http://localhost:3001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "seller1", "password": "password123", "email": "seller1@test.com"}'
+```
+
+2. **Создание товара:**
+```bash
+curl -X POST http://localhost:3001/api/items \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "title": "Игровая клавиатура",
+    "description": "Механическая клавиатура с RGB подсветкой",
+    "price": 5000,
+    "imageUrl": "https://example.com/keyboard.jpg"
+  }'
+```
+
+3. **Создание ставки:**
+```bash
+curl -X POST http://localhost:3001/api/items/1/bids \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer BUYER_TOKEN_HERE" \
+  -d '{"amount": 5500}'
+```
+
+4. **Получение всех товаров:**
+```bash
+curl -X GET http://localhost:3001/api/items
+```
+
+# Как сдавать
+
+- Создайте форк репозитория в организации 41ISP с названием webdev-6-вашафамилия
+- Используя ветку wip сделайте задание
+- Зафиксируйте изменения в вашем репозитории
+- Когда документ будет готов - создайте пул реквест из ветки wip (вашей) на ветку main (тоже вашу) и укажите меня (ktkv419) как reviewer
+
+Не мержите сами коммит, это сделаю я после проверки задания
