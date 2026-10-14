@@ -9,7 +9,7 @@ import Login from "./pages/Login.jsx"
 import MyBids from "./pages/MyBids.jsx"
 import Logout from "./pages/Logout.jsx"
 import ItemDetail from "./pages/ItemDetail.jsx"
-import { CreateItem } from "./components/CreateItem.jsx";
+import  CreateItem  from "./components/CreateItem.jsx";
 
 createRoot(document.getElementById("root")).render(
     <StrictMode>
